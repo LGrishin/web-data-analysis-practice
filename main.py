@@ -8,14 +8,14 @@ from config import TOKEN, WINDY_API_KEY
 bot = telebot.TeleBot(TOKEN)
 
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start'])  # /start
 def welcome(message):
     bot.send_message(message.chat.id,
                      "Привет! Отправь мне свою геолокацию для получения данных о погоде! "
                      "Если хочешь узнать больше, используй /help")
 
 
-@bot.message_handler(commands=['help'])
+@bot.message_handler(commands=['help'])  # /help
 def help_inf(message):
     bot.send_message(message.chat.id,
                      "Данный бот позволяет получить информацию о погодных условиях для твоей геолокации."
@@ -26,12 +26,12 @@ def help_inf(message):
                      "отправь отправь боту свою геолокацию. Информация о погоде получена с сайта windy.com")
 
 
-@bot.message_handler(content_types=['text'])
+@bot.message_handler(content_types=['text'])  # любой текст
 def lalala(message):
     bot.send_message(message.chat.id, "Чтобы получить данные о погоде, отправь свою геолокацию.")
 
 
-def get_data_from_windy(loc: list[int, int]):
+def get_data_from_windy(loc: list[int, int]):  # отправка запроса в windy.com через API
     data = {"lat": loc[1],
             "lon": loc[0],
             "model": "gfs",
@@ -44,10 +44,11 @@ def get_data_from_windy(loc: list[int, int]):
     return s
 
 
-def data_processing(data):
+def data_processing(data):  # Обработка полученных данных
     weather_values = data.json()
-    weather_values['ts'] = [int(i / 1000) + 25200 for i in weather_values['ts']]
-    weather_values['temp-surface'] = [int(i - 273.15) for i in weather_values['temp-surface']]
+    weather_values['ts'] = [int(i / 1000) + 25200 for i in weather_values['ts']]  # преобразование времени из ms в s
+    weather_values['temp-surface'] = [int(i - 273.15) for i in
+                                      weather_values['temp-surface']]  # преобразование температуры из K в °C
     weather_values['wind_u-surface'] = np.array(weather_values['wind_u-surface'])
     weather_values['wind_v-surface'] = np.array(weather_values['wind_v-surface'])
     return weather_values
@@ -55,7 +56,7 @@ def data_processing(data):
 
 def answer(weather_values):
     wind_direction = []
-    for i in range(weather_values['wind_u-surface'].size):
+    for i in range(weather_values['wind_u-surface'].size):  # Определение направления ветра
         if weather_values['wind_u-surface'][i] >= 0 and weather_values['wind_v-surface'][i] >= 0:
             wind_direction.append('ЮЗ')  # юго-западный
         if weather_values['wind_u-surface'][i] < 0 and weather_values['wind_v-surface'][i] >= 0:
@@ -67,24 +68,26 @@ def answer(weather_values):
 
     wind_u = np.power(weather_values['wind_u-surface'], 2)
     wind_v = np.power(weather_values['wind_v-surface'], 2)
-    wind_speed = np.power(wind_v + wind_u, 1 / 2)
+    wind_speed = np.power(wind_v + wind_u, 1 / 2)  # вычисляем длину вектора ветра
 
     time = []
     for i in weather_values['ts']:
-        time.append(datetime.utcfromtimestamp(i).strftime('%Y-%m-%d %H:%M:%S')[11:16])
+        time.append(datetime.utcfromtimestamp(i).strftime('%Y-%m-%d %H:%M:%S')[
+                    11:16])  # переводим время из unix в нормальный формат
 
     text = 'Погода на ближайшие сутки:\n\n'
     plot_time = np.array(time[:8])
-    temp_surface = np.array(weather_values['temp-surface'][:8])
+    temp_surface = np.array(weather_values['temp-surface'][:8])  # заготовки для построения графиков
     precip_surface = np.array(weather_values['past3hprecip-surface'][:8])
 
-    for i in range(9):
+    for i in range(9):  # формирование ответа
         text += time[i] + '  ' + str(weather_values['temp-surface'][i]) + '°C  ' + \
                 str(float(weather_values['past3hprecip-surface'][i]))[:3] + 'mm  ' \
                 + str(wind_speed[i])[:3] + 'm/s, ' + wind_direction[i] + '\n\n'
 
     plt.plot(plot_time, temp_surface, color='r')
-    plt.savefig('D:/HSE/practis/tgbot2/temperature_dynamics.png', dpi=100)
+    plt.savefig('D:/HSE/practis/tgbot2/temperature_dynamics.png',
+                dpi=100)  # перезаписываем графики в фотки чтобы потом отправить пользователю
     plt.clf()
     plt.ylim(ymin=0)
     plt.plot(plot_time, precip_surface, color='m')
@@ -92,7 +95,7 @@ def answer(weather_values):
     return text
 
 
-def send_image(chat_id):
+def send_image(chat_id):  # отправляем фотки пользователю
     bot.send_photo(chat_id, photo=open('D:/HSE/practis/tgbot2/temperature_dynamics.png', 'rb'),
                    caption="Динамика температуры")
     bot.send_photo(chat_id, photo=open('D:/HSE/practis/tgbot2/Precipitation_dynamics.png', 'rb'),
@@ -102,12 +105,12 @@ def send_image(chat_id):
 @bot.message_handler(content_types=['location'])
 def location(message):
     if message.location is not None:
-        loc = [message.location.longitude, message.location.latitude]
-        data = get_data_from_windy(loc)
-        weather_values = data_processing(data)
-        text = answer(weather_values)
-        bot.send_message(message.chat.id, text)
-        send_image(message.chat.id)
+        loc = [message.location.longitude, message.location.latitude]  # получаем координаты из геолокации
+        data = get_data_from_windy(loc)  # отправляем API запрос для данных координат
+        weather_values = data_processing(data)  # обрабатываем данные и приводим к удобному виду
+        text = answer(weather_values)  # формируем ответ пользователю
+        bot.send_message(message.chat.id, text)  # отправляем сообщение с прогнозом
+        send_image(message.chat.id)  # отправляем графики пользователю
 
 
 bot.polling(none_stop=True)
